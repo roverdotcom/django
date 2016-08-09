@@ -567,6 +567,12 @@ class Model(six.with_metaclass(ModelBase)):
     def _set_pk_val(self, value):
         return setattr(self, self._meta.pk.attname, value)
 
+    def get_identity_map(self):
+        try:
+            return self._local_identity_map
+        except AttributeError:
+            return None
+
     pk = property(_get_pk_val, _set_pk_val)
 
     def get_deferred_fields(self):

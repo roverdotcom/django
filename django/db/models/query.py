@@ -5,6 +5,7 @@ The main QuerySet implementation. This provides the public API for the ORM.
 import copy
 import sys
 import warnings
+import weakref
 from collections import OrderedDict, deque
 
 from django.conf import settings
@@ -61,6 +62,7 @@ class QuerySet(object):
         self._prefetch_related_lookups = []
         self._prefetch_done = False
         self._known_related_objects = {}        # {rel_field, {pk: rel_obj}}
+        self._local_identity_map = None
 
     def as_manager(cls):
         # Address the circular dependency between `Queryset` and `Manager`.
@@ -253,6 +255,10 @@ class QuerySet(object):
         related_populators = get_related_populators(klass_info, select, db)
         for row in compiler.results_iter(results):
             obj = model_cls.from_db(db, init_list, row[model_fields_start:model_fields_end])
+            if self._local_identity_map is not None:
+                self._local_identity_map[type(obj), obj.pk] = obj
+                obj._local_identity_map = self._local_identity_map
+
             if related_populators:
                 for rel_populator in related_populators:
                     rel_populator.populate(row, obj)
@@ -879,6 +885,19 @@ class QuerySet(object):
         clone._db = alias
         return clone
 
+    def with_identity_map(self, local_identity_map=False):
+        clone = self._clone()
+        if clone._local_identity_map is None:
+            if local_identity_map is not False:
+                clone._local_identity_map = local_identity_map
+            else:
+                #clone._local_identity_map = weakref.WeakValueDictionary()
+                clone._local_identity_map = {}
+        return clone
+
+    def get_identity_map(self):
+        return self._local_identity_map
+
     ###################################
     # PUBLIC INTROSPECTION ATTRIBUTES #
     ###################################
@@ -955,6 +974,7 @@ class QuerySet(object):
         c._for_write = self._for_write
         c._prefetch_related_lookups = self._prefetch_related_lookups[:]
         c._known_related_objects = self._known_related_objects
+        c._local_identity_map = self._local_identity_map
         c.__dict__.update(kwargs)
         if setup and hasattr(c, '_setup_query'):
             c._setup_query()
@@ -1773,6 +1793,9 @@ class RelatedPopulator(object):
         setattr(from_obj, self.cache_name, obj)
         if obj and self.reverse_cache_name:
             setattr(obj, self.reverse_cache_name, from_obj)
+
+        if hasattr(from_obj, '_local_identity_map'):
+            obj._local_identity_map = from_obj._local_identity_map
 
 
 def get_related_populators(klass_info, select, db):

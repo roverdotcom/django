@@ -438,6 +438,7 @@ class SingleRelatedObjectDescriptor(object):
         if queryset is None:
             queryset = self.get_queryset()
         queryset._add_hints(instance=instances[0])
+        queryset = queryset.with_identity_map(instances[0].get_identity_map())
 
         rel_obj_attr = attrgetter(self.related.field.attname)
         instance_attr = lambda obj: obj._get_pk_val()
@@ -463,15 +464,28 @@ class SingleRelatedObjectDescriptor(object):
             if related_pk is None:
                 rel_obj = None
             else:
-                params = {}
-                for lh_field, rh_field in self.related.field.related_fields:
-                    params['%s__%s' % (self.related.field.name, rh_field.name)] = getattr(instance, rh_field.attname)
-                try:
-                    rel_obj = self.get_queryset(instance=instance).get(**params)
-                except self.related.related_model.DoesNotExist:
-                    rel_obj = None
-                else:
-                    setattr(rel_obj, self.related.field.get_cache_name(), instance)
+                found_in_identity_map = False
+                has_identity_map = hasattr(instance, '_local_identity_map')
+                if has_identity_map:
+                    rel_obj = instance._local_identity_map.get(
+                        (self.related.related_model, related_pk)
+                    )
+                    found_in_identity_map = rel_obj is not None
+
+                if not found_in_identity_map:
+                    params = {}
+                    for lh_field, rh_field in self.related.field.related_fields:
+                        params['%s__%s' % (self.related.field.name, rh_field.name)] = getattr(instance, rh_field.attname)
+                    try:
+                        rel_obj = self.get_queryset(instance=instance).get(**params)
+                    except self.related.related_model.DoesNotExist:
+                        rel_obj = None
+                    else:
+                        setattr(rel_obj, self.related.field.get_cache_name(), instance)
+                        if has_identity_map:
+                            rel_obj._local_identity_map = instance._local_identity_map
+                            instance._local_identity_map[type(rel_obj), rel_obj.pk] = rel_obj
+
             setattr(instance, self.cache_name, rel_obj)
         if rel_obj is None:
             raise self.RelatedObjectDoesNotExist(
@@ -563,6 +577,7 @@ class ReverseSingleRelatedObjectDescriptor(object):
         if queryset is None:
             queryset = self.get_queryset()
         queryset._add_hints(instance=instances[0])
+        queryset = queryset.with_identity_map(instances[0].get_identity_map())
 
         rel_obj_attr = self.field.get_foreign_related_value
         instance_attr = self.field.get_local_related_value
@@ -600,20 +615,37 @@ class ReverseSingleRelatedObjectDescriptor(object):
             if None in val:
                 rel_obj = None
             else:
-                params = {
-                    rh_field.attname: getattr(instance, lh_field.attname)
-                    for lh_field, rh_field in self.field.related_fields}
-                qs = self.get_queryset(instance=instance)
-                extra_filter = self.field.get_extra_descriptor_filter(instance)
-                if isinstance(extra_filter, dict):
-                    params.update(extra_filter)
-                    qs = qs.filter(**params)
-                else:
-                    qs = qs.filter(extra_filter, **params)
-                # Assuming the database enforces foreign keys, this won't fail.
-                rel_obj = qs.get()
-                if not self.field.rel.multiple:
-                    setattr(rel_obj, self.field.rel.get_cache_name(), instance)
+                found_in_identity_map = False
+                has_identity_map = hasattr(instance, '_local_identity_map')
+                if has_identity_map and len(self.field.related_fields) == 1:
+                    lh_field, rh_field = self.field.related_fields[0]
+                    if rh_field.primary_key:
+                        pk = getattr(instance, lh_field.attname)
+                        rel_obj = instance._local_identity_map.get(
+                            (self.field.rel.to._default_manager.model, pk)
+                        )
+                        found_in_identity_map = rel_obj is not None
+
+                if not found_in_identity_map:
+                    params = {
+                        rh_field.attname: getattr(instance, lh_field.attname)
+                        for lh_field, rh_field in self.field.related_fields}
+                    qs = self.get_queryset(instance=instance)
+                    extra_filter = self.field.get_extra_descriptor_filter(instance)
+                    if isinstance(extra_filter, dict):
+                        params.update(extra_filter)
+                        qs = qs.filter(**params)
+                    else:
+                        qs = qs.filter(extra_filter, **params)
+                    # Assuming the database enforces foreign keys, this won't fail.
+                    rel_obj = qs.get()
+                    if not self.field.rel.multiple:
+                        setattr(rel_obj, self.field.rel.get_cache_name(), instance)
+                    if has_identity_map:
+                        rel_obj._local_identity_map = instance._local_identity_map
+                        instance._local_identity_map[type(rel_obj), rel_obj.pk] = rel_obj
+
+
             setattr(instance, self.cache_name, rel_obj)
         if rel_obj is None and not self.field.null:
             raise self.RelatedObjectDoesNotExist(
@@ -715,13 +747,18 @@ def create_foreign_related_manager(superclass, rel_field, rel_model):
                     if val is None or (val == '' and empty_strings_as_null):
                         return qs.none()
                 qs._known_related_objects = {rel_field: {self.instance.pk: self.instance}}
-                return qs
+                return qs.with_identity_map(
+                    getattr(self.instance, '_local_identity_map', None)
+                )
 
         def get_prefetch_queryset(self, instances, queryset=None):
             if queryset is None:
                 queryset = super(RelatedManager, self).get_queryset()
 
             queryset._add_hints(instance=instances[0])
+            queryset = queryset.with_identity_map(
+                instances[0].get_identity_map()
+            )
             queryset = queryset.using(queryset._db or self._db)
 
             rel_obj_attr = rel_field.get_local_related_value
