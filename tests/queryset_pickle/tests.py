@@ -52,6 +52,12 @@ class PickleabilityTestCase(TestCase):
         self.assertEqual(original.__class__, unpickled.__class__)
         self.assertEqual(original.args, unpickled.args)
 
+    def test_can_pickle_doesnotexist_class(self):
+        self.assertEqual(
+            pickle.loads(pickle.dumps(Event.DoesNotExist)),
+            Event.DoesNotExist
+        )
+
     def test_manager_pickle(self):
         pickle.loads(pickle.dumps(Happening.objects))
 

@@ -4,6 +4,7 @@ import copy
 import inspect
 import warnings
 from itertools import chain
+from six.moves import copyreg
 
 from django.apps import apps
 from django.conf import settings
@@ -52,6 +53,20 @@ class Deferred(object):
 DEFERRED = Deferred()
 
 
+class ExceptionMeta(type):
+    """
+    Custom metaclass for dynamically created model exceptions
+    """
+    pass
+
+
+def pickle_exc_meta(obj):
+    return getattr, (obj.model, obj.__name__)
+
+
+copyreg.pickle(ExceptionMeta, pickle_exc_meta)
+
+
 def subclass_exception(name, parents, module, attached_to=None):
     """
     Create exception subclass. Used by ModelBase below.
@@ -72,8 +87,9 @@ def subclass_exception(name, parents, module, attached_to=None):
 
         class_dict['__reduce__'] = __reduce__
         class_dict['__setstate__'] = __setstate__
+        class_dict['model'] = attached_to
 
-    return type(name, parents, class_dict)
+    return ExceptionMeta(name, parents, class_dict)
 
 
 class ModelBase(type):
