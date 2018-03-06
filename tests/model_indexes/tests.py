@@ -1,5 +1,6 @@
 from django.db import models
 from django.test import SimpleTestCase
+from django.test.utils import isolate_apps
 
 from .models import Book, ChildModel1, ChildModel2
 
@@ -69,6 +70,18 @@ class IndexesTests(SimpleTestCase):
         with self.assertRaisesMessage(AssertionError, msg):
             long_field_index.set_name_with_model(Book)
 
+    @isolate_apps('model_indexes')
+    def test_name_auto_generation_with_quoted_db_table(self):
+        class QuotedDbTable(models.Model):
+            name = models.CharField(max_length=50)
+
+            class Meta:
+                db_table = '"t_quoted"'
+
+        index = models.Index(fields=['name'])
+        index.set_name_with_model(QuotedDbTable)
+        self.assertEqual(index.name, 't_quoted_name_e4ed1b_idx')
+
     def test_deconstruction(self):
         index = models.Index(fields=['title'])
         index.set_name_with_model(Book)
@@ -85,7 +98,7 @@ class IndexesTests(SimpleTestCase):
 
     def test_name_set(self):
         index_names = [index.name for index in Book._meta.indexes]
-        self.assertEqual(index_names, ['model_index_title_196f42_idx'])
+        self.assertCountEqual(index_names, ['model_index_title_196f42_idx', 'model_index_isbn_34f975_idx'])
 
     def test_abstract_children(self):
         index_names = [index.name for index in ChildModel1._meta.indexes]
