@@ -48,6 +48,7 @@ class Happening(models.Model):
     if six.PY3:
         # default serializable on Python 3 only
         number2 = models.IntegerField(blank=True, default=Numbers.get_static_number)
+    event = models.OneToOneField(Event, models.CASCADE, null=True)
 
 
 class Container(object):
