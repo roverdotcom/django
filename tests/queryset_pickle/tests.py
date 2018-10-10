@@ -58,6 +58,18 @@ class PickleabilityTestCase(TestCase):
             Event.DoesNotExist
         )
 
+    def test_forward_relatedobjectdoesnotexist_class(self):
+        # ForwardManyToOneDescriptor
+        klass = Event.group.RelatedObjectDoesNotExist
+        self.assertIs(pickle.loads(pickle.dumps(klass)), klass)
+        # ForwardOneToOneDescriptor
+        klass = Happening.event.RelatedObjectDoesNotExist
+        self.assertIs(pickle.loads(pickle.dumps(klass)), klass)
+
+    def test_reverse_one_to_one_relatedobjectdoesnotexist_class(self):
+        klass = Event.happening.RelatedObjectDoesNotExist
+        self.assertIs(pickle.loads(pickle.dumps(klass)), klass)
+
     def test_manager_pickle(self):
         pickle.loads(pickle.dumps(Happening.objects))
 

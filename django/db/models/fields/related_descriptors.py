@@ -99,8 +99,13 @@ class ForwardManyToOneDescriptor(object):
         # a string model reference.
         return type(
             str('RelatedObjectDoesNotExist'),
-            (self.field.remote_field.model.DoesNotExist, AttributeError),
-            {}
+            (self.field.remote_field.model.DoesNotExist, AttributeError), {
+                '__module__': self.field.model.__module__,
+                '__qualname__': '%s.%s.RelatedObjectDoesNotExist' % (
+                    self.field.model.__qualname__,
+                    self.field.name,
+                ),
+            }
         )
 
     def is_cached(self, instance):
@@ -262,6 +267,14 @@ class ForwardManyToOneDescriptor(object):
         if value is not None and not self.field.remote_field.multiple:
             setattr(value, self.field.remote_field.get_cache_name(), instance)
 
+    def __reduce__(self):
+        """
+        Pickling should return the instance attached by self.field on the
+        model, not a new copy of that descriptor. Use getattr() to retrieve
+        the instance directly from the model.
+        """
+        return getattr, (self.field.model, self.field.name)
+
 
 class ForwardOneToOneDescriptor(ForwardManyToOneDescriptor):
     """
@@ -318,8 +331,13 @@ class ReverseOneToOneDescriptor(object):
         # consistency with `ForwardManyToOneDescriptor`.
         return type(
             str('RelatedObjectDoesNotExist'),
-            (self.related.related_model.DoesNotExist, AttributeError),
-            {}
+            (self.related.related_model.DoesNotExist, AttributeError), {
+                '__module__': self.related.model.__module__,
+                '__qualname__': '%s.%s.RelatedObjectDoesNotExist' % (
+                    self.related.model.__qualname__,
+                    self.related.name,
+                )
+            },
         )
 
     def is_cached(self, instance):
@@ -466,6 +484,10 @@ class ReverseOneToOneDescriptor(object):
             # Set the forward accessor cache on the related object to the current
             # instance to avoid an extra SQL query if it's accessed later on.
             setattr(value, self.related.field.get_cache_name(), instance)
+
+    def __reduce__(self):
+        # Same purpose as ForwardManyToOneDescriptor.__reduce__().
+        return getattr, (self.related.model, self.related.name)
 
 
 class ReverseManyToOneDescriptor(object):
