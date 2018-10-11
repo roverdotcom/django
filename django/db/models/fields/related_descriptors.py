@@ -97,15 +97,12 @@ class ForwardManyToOneDescriptor(object):
         # The exception can't be created at initialization time since the
         # related model might not be resolved yet; `rel.model` might still be
         # a string model reference.
-        return type(
+        from django.db.models.base import subclass_exception
+        return subclass_exception(
             str('RelatedObjectDoesNotExist'),
-            (self.field.remote_field.model.DoesNotExist, AttributeError), {
-                '__module__': self.field.model.__module__,
-                '__qualname__': '%s.%s.RelatedObjectDoesNotExist' % (
-                    self.field.model.__qualname__,
-                    self.field.name,
-                ),
-            }
+            (self.field.remote_field.model.DoesNotExist, AttributeError),
+            self.field.model.__module__,
+            attached_to=self,
         )
 
     def is_cached(self, instance):
@@ -329,15 +326,12 @@ class ReverseOneToOneDescriptor(object):
     def RelatedObjectDoesNotExist(self):
         # The exception isn't created at initialization time for the sake of
         # consistency with `ForwardManyToOneDescriptor`.
-        return type(
+        from django.db.models.base import subclass_exception
+        return subclass_exception(
             str('RelatedObjectDoesNotExist'),
-            (self.related.related_model.DoesNotExist, AttributeError), {
-                '__module__': self.related.model.__module__,
-                '__qualname__': '%s.%s.RelatedObjectDoesNotExist' % (
-                    self.related.model.__qualname__,
-                    self.related.name,
-                )
-            },
+            (self.related.related_model.DoesNotExist, AttributeError),
+            self.related.model.__module__,
+            attached_to=self,
         )
 
     def is_cached(self, instance):
