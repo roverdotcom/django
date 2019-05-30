@@ -142,7 +142,7 @@ with a cleaner failure message.
         Create a picklable (exc_type, exc, tb) encoding the given message.
         """
         try:
-            raise ParallelTestException(msg) from None
+            raise ParallelTestException(msg)
         except Exception:
             err = sys.exc_info()
 
