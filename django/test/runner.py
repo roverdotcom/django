@@ -126,7 +126,7 @@ with a cleaner failure message.
         if PY2:
             return False
         exc_type, exc, tb = err
-        return exc.__context__ is not None or exc.__context__ is not None
+        return exc.__context__ is not None
 
     def try_pickle(self, err):
         """
