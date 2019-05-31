@@ -20,6 +20,7 @@ from django.test.utils import (
 )
 from django.utils.datastructures import OrderedSet
 from django.utils.deprecation import RemovedInDjango21Warning
+from django.utils.six import PY2
 from django.utils.six import StringIO
 
 try:
@@ -121,6 +122,9 @@ with a cleaner failure message.
 """.format(test, subtest, pickle_exc))
 
     def exception_has_chain(self, err):
+        # Python 2 doesn't have __context__ available
+        if PY2:
+            return False
         exc_type, exc, tb = err
         return exc.__context__ is not None or exc.__context__ is not None
 
