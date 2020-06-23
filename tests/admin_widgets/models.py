@@ -33,6 +33,15 @@ class Band(models.Model):
 
 
 @python_2_unicode_compatible
+class UnsafeLimitChoicesTo(models.Model):
+    band = models.ForeignKey(
+        Band,
+        models.CASCADE,
+        limit_choices_to={'name': '"&><escapeme'},
+    )
+
+
+@python_2_unicode_compatible
 class Album(models.Model):
     band = models.ForeignKey(Band, models.CASCADE)
     name = models.CharField(max_length=100)
